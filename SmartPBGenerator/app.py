@@ -1,6 +1,7 @@
 from flask import Flask
-import requests
-import json
+from IPython.display import display
+import requests as rq
+import pandas as pd
 
 # Create an instance of the Flask class that is the WSGI application.
 # The first argument is the name of the application module or package,
@@ -12,21 +13,21 @@ app = Flask(__name__)
 # and add decorators to define the appropriate resource locators for them.
 
 @app.route('/')
-@app.route('/hello')
+@app.route('/spbgen')
 
-def hello():
+def spbgen():
     # Declare how many results are wanted
-    drawings = 10
-    topNumbers = 10
+    drawings = 200
+    topNumbers = 20
 
     # Pull numbers from API, calculate stats
     pNumbers = PBNumbers(drawings)
-    pRecurring = HighestRecurring(pNumbers.results(), topNumbers)
-
+    pTopNum = HighestRecurring(pNumbers.results(), topNumbers)
+    display(pTopNum.whiteNumbers())
+    display(pTopNum.redNumbers())
 
     # Render the page
-    # return pNumbers.results()
-    return str(pRecurring.results())
+    return "success"
 
 class PBNumbers:
     # Pull the defined number of winning number drawings
@@ -35,8 +36,10 @@ class PBNumbers:
         
     def results(self):
         api_url = "https://data.ny.gov/resource/d6yy-54nr.json?$select=winning_numbers&$limit={}".format(self.drawings)
-        response = requests.get(api_url)
-        return response.json()
+
+        # Get winning_numbers data, convert to DataFrame, split numbers into columns
+        response = pd.concat([pd.DataFrame(rq.get(api_url).json())['winning_numbers'].str.split(' ', expand=True)], axis=1)
+        return response
 
 class HighestRecurring:
     # Calculate the stats for the winning numbers retrieved
@@ -44,9 +47,22 @@ class HighestRecurring:
         self.response = response
         self.topNumbers = topNumbers
 
-    def results(self):
-        highestRecurring = self.response.count(10)
-        return highestRecurring
+    def whiteNumbers(self):
+        # Pull white number columns, stack numbers into series, count values and assign column names
+        topWhiteNumbers = self.response[[0, 1, 2, 3, 4]].stack().value_counts(sort=True).reset_index()
+        topWhiteNumbers.columns = ['number', 'count']
+
+        # Return the desired quantity of top white numbers
+        return topWhiteNumbers.iloc[0:self.topNumbers]
+    
+    def redNumbers(self):
+        # Pull red number column as series, count values and assign column names
+        topRedNumbers = self.response[5].value_counts(sort=True).reset_index()
+        topRedNumbers.columns = ['number', 'count']
+
+        # Return the desired quantity of top red numbers
+        return topRedNumbers.iloc[0:self.topNumbers]
+
 
 if __name__ == '__main__':
     # Run the app server on localhost:4449
